@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioSecure - Biometric Analysis Results</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-cyan: #00f5ff;
+            --primary-blue: #0066ff;
+            --secondary-purple: #6366f1;
+            --accent-green: #00ff88;
+            --accent-yellow: #ffaa00;
+            --accent-red: #ff4444;
+            --dark-bg: #0a0a0f;
+            --darker-bg: #050508;
+            --card-bg: rgba(15, 15, 25, 0.95);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --border-glow: rgba(0, 245, 255, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --error: #ff4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Advanced Background */
+        .advanced-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 30%, #16213e 70%, #0f3460 100%);
+        }
+
+        .grid-overlay {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 245, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 245, 255, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
+        .scanning-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary-cyan), transparent);
+            animation: scan 3s ease-in-out infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        /* Security Header */
+        .security-header {
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-glow);
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary-cyan);
+            text-shadow: 0 0 20px var(--primary-cyan);
+            transition: all 0.3s ease;
+        }
+
+        .logo:hover {
+            color: var(--accent-green);
+            text-shadow: 0 0 25px var(--accent-green);
+            transform: scale(1.05);
+        }
+
+        .analysis-status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Main Container */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        /* Results Header */
+        .results-header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .results-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--primary-cyan);
+            text-shadow: 0 0 30px var(--primary-cyan);
+            margin-bottom: 10px;
+            letter-spacing: 3px;
+        }
+
+        .results-subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+            font-weight: 300;
+        }
+
+        /* Score Dashboard */
+        .score-dashboard {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .score-dashboard::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, var(--primary-cyan), var(--secondary-purple), var(--primary-blue));
+            z-index: -1;
+            border-radius: 22px;
+            opacity: 0.6;
+            animation: borderGlow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes borderGlow {
+            0% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .score-content {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .score-meter {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+        }
+
+        .meter-circle {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(
+                from 0deg,
+                var(--error) 0deg 72deg,
+                var(--warning) 72deg 180deg,
+                var(--accent-green) 180deg 252deg,
+                var(--primary-cyan) 252deg 360deg
+            );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .meter-inner {
+            width: 80%;
+            height: 80%;
+            background: var(--dark-bg);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .score-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary-cyan);
+            text-shadow: 0 0 20px var(--primary-cyan);
+        }
+
+        .score-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 5px;
+        }
+
+        .match-status {
+            text-align: center;
+        }
+
+        .status-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .status-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .status-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .confidence-metrics {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .metric-item {
+            background: var(--glass-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .metric-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--primary-cyan);
+        }
+
+        /* Analysis Grid */
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .analysis-column {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-glow);
+            border-radius: 20px;
+            padding: 30px;
+            position: relative;
+        }
+
+        .column-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .column-icon {
+            font-size: 24px;
+            color: var(--primary-cyan);
+        }
+
+        .column-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .analysis-stage {
+            background: var(--glass-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .analysis-stage:hover {
+            border-color: var(--primary-cyan);
+            background: rgba(0, 245, 255, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stage-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: var(--accent-green);
+            text-transform: uppercase;
+        }
+
+        .stage-status {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .stage-image {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .stage-image:hover {
+            transform: scale(1.05);
+            border-color: var(--primary-cyan);
+        }
+
+        /* Action Controls */
+        .action-controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .action-button {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, var(--primary-blue), var(--secondary-purple));
+            color: var(--text-primary);
+            border: none;
+            border-radius: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 102, 255, 0.4);
+        }
+
+        .action-button.secondary {
+            background: linear-gradient(135deg, var(--accent-green), #20c997);
+        }
+
+        .action-button.secondary:hover {
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.4);
+        }
+
+        /* Security Badge */
+        .security-badge {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-glow);
+            border-radius: 50px;
+            padding: 15px 25px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-green);
+            z-index: 50;
+        }
+
+        .badge-icon {
+            font-size: 16px;
+            animation: pulse 2s infinite;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .analysis-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .score-content {
+                grid-template-columns: 1fr;
+                gap: 30px;
+                text-align: center;
+            }
+            
+            .action-controls {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 20px 15px;
+            }
+            
+            .score-dashboard {
+                padding: 25px;
+            }
+            
+            .results-title {
+                font-size: 28px;
+            }
+            
+            .analysis-column {
+                padding: 20px;
+            }
+        }
+
+        /* Dynamic Match Status Colors */
+        .match-strong { color: var(--accent-green); }
+        .match-good { color: var(--primary-cyan); }
+        .match-possible { color: var(--warning); }
+        .match-weak { color: var(--accent-yellow); }
+        .match-none { color: var(--error); }
+    </style>
+</head>
+<body>
+    <!-- Advanced Background -->
+    <div class="advanced-background">
+        <div class="grid-overlay"></div>
+        <div class="scanning-line"></div>
+    </div>
+
+    <!-- Security Header -->
+    <div class="security-header">
+        <div class="header-content">
+            <div class="logo" onclick="goBack()" style="cursor: pointer;" title="Return to Home">
+                <i class="fas fa-eye"></i> BioSecure
+            </div>
+            <div class="analysis-status">
+                <div class="status-indicator"></div>
+                ANALYSIS COMPLETE
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Results Header -->
+        <div class="results-header">
+            <h1 class="results-title">BIOMETRIC ANALYSIS</h1>
+            <p class="results-subtitle">Advanced Neural Network Pattern Recognition Results</p>
+        </div>
+
+        <!-- Score Dashboard -->
+        <div class="score-dashboard">
+            <div class="score-content">
+                <!-- Score Meter -->
+                <div class="score-meter">
+                    <div class="meter-circle">
+                        <div class="meter-inner">
+                            <div class="score-value">{{ "%.1f"|format(similarity * 100) }}%</div>
+                            <div class="score-label">Match Score</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Match Status -->
+                <div class="match-status">
+                    {% if similarity > 0.70 %}
+                        <div class="status-icon match-strong">
+                            <i class="fas fa-shield-check"></i>
+                        </div>
+                        <div class="status-text match-strong">VERIFIED MATCH</div>
+                        <div class="status-description">
+                            High confidence biometric verification (>70%)<br>
+                            Identity confirmed with security clearance
+                        </div>
+                    {% elif similarity > 0.55 %}
+                        <div class="status-icon match-good">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="status-text match-good">AUTHENTICATED</div>
+                        <div class="status-description">
+                            Good confidence match (55-70%)<br>
+                            Identity verified with standard protocols
+                        </div>
+                    {% elif similarity > 0.35 %}
+                        <div class="status-icon match-possible">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="status-text match-possible">POSSIBLE MATCH</div>
+                        <div class="status-description">
+                            Moderate confidence (35-55%)<br>
+                            Additional verification recommended
+                        </div>
+                    {% elif similarity > 0.20 %}
+                        <div class="status-icon match-weak">
+                            <i class="fas fa-question-circle"></i>
+                        </div>
+                        <div class="status-text match-weak">INCONCLUSIVE</div>
+                        <div class="status-description">
+                            Low confidence (20-35%)<br>
+                            Insufficient data for verification
+                        </div>
+                    {% else %}
+                        <div class="status-icon match-none">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="status-text match-none">NO MATCH</div>
+                        <div class="status-description">
+                            Very low confidence (<20%)<br>
+                            Different identity confirmed
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Confidence Metrics -->
+                <div class="confidence-metrics">
+                    <div class="metric-item">
+                        <div class="metric-label">Neural Network</div>
+                        <div class="metric-value">{{ "%.3f"|format(similarity) }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Processing Time</div>
+                        <div class="metric-value">2.34s</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Features Analyzed</div>
+                        <div class="metric-value">2,048</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Algorithms Used</div>
+                        <div class="metric-value">7 Filters</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis Grid -->
+        <div class="analysis-grid">
+            <!-- Primary Sample -->
+            <div class="analysis-column">
+                <div class="column-header">
+                    <div class="column-icon">
+                        <i class="fas fa-fingerprint"></i>
+                    </div>
+                    <div class="column-title">Primary Sample</div>
+                </div>
+                
+                {% for image in gen1_images %}
+                <div class="analysis-stage">
+                    <div class="stage-header">
+                        <div class="stage-name">{{ image.split('/')[-1].split('.')[0].split('_')[-1].replace('-', ' ') }}</div>
+                        <div class="stage-status">✓ Processed</div>
+                    </div>
+                    <img src="{{ url_for('static', filename=image) }}" alt="Analysis Stage" class="stage-image">
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Verification Sample -->
+            <div class="analysis-column">
+                <div class="column-header">
+                    <div class="column-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div class="column-title">Verification Sample</div>
+                </div>
+                
+                {% for image in gen2_images %}
+                <div class="analysis-stage">
+                    <div class="stage-header">
+                        <div class="stage-name">{{ image.split('/')[-1].split('.')[0].split('_')[-1].replace('-', ' ') }}</div>
+                        <div class="stage-status">✓ Processed</div>
+                    </div>
+                    <img src="{{ url_for('static', filename=image) }}" alt="Analysis Stage" class="stage-image">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Action Controls -->
+        <div class="action-controls">
+            <button onclick="goBack()" class="action-button secondary">
+                <i class="fas fa-redo"></i> New Analysis
+            </button>
+            <button onclick="downloadReport()" class="action-button">
+                <i class="fas fa-download"></i> Export Report
+            </button>
+        </div>
+    </div>
+
+    <!-- Security Badge -->
+    <div class="security-badge">
+        <div class="badge-icon">
+            <i class="fas fa-shield-alt"></i>
+        </div>
+        <div>SECURE SESSION</div>
+    </div>
+
+    <script>
+        function goBack() {
+            window.location.replace("/");
+        }
+
+        function downloadReport() {
+            window.open('/export-report', '_blank');
+        }
+
+        // Add some dynamic effects
+        document.addEventListener('DOMContentLoaded', function() {
+            // Animate score meter
+            const scoreValue = document.querySelector('.score-value');
+            const finalScore = parseFloat(scoreValue.textContent);
+            let currentScore = 0;
+            const increment = finalScore / 50;
+            
+            const timer = setInterval(() => {
+                currentScore += increment;
+                if (currentScore >= finalScore) {
+                    currentScore = finalScore;
+                    clearInterval(timer);
+                }
+                scoreValue.textContent = currentScore.toFixed(1) + '%';
+            }, 20);
+
+            // Add stagger animation to analysis stages
+            const stages = document.querySelectorAll('.analysis-stage');
+            stages.forEach((stage, index) => {
+                stage.style.animationDelay = (index * 0.1) + 's';
+                stage.style.animation = 'slideIn 0.6s ease forwards';
+            });
+        });
+
+        // CSS for slide-in animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
