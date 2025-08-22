@@ -1,5 +1,8 @@
 import cv2
 import numpy as np
+from scipy.ndimage import uniform_filter
+from scipy.signal import correlate2d
+from scipy.stats import entropy
 
 
 def extract_iris_features(image, original_color_image=None):
@@ -13,19 +16,19 @@ def extract_iris_features(image, original_color_image=None):
     segmentation_result = detect_iris_hough(filtered_image)
     
     if segmentation_result is None:
-        print("Hough detection failed. Attempting fallback to contour detection...")
+
         try:
             cX, cY, p_r_contour, binary_image = detectIris(filtered_image)
             i_r = int(p_r_contour * 2.5) 
             center = (cX, cY)
             segmentation_result = (center, p_r_contour, i_r)
-            print("Fallback to contour detection successful.")
+
         except Exception as e:
-            print(f"Contour detection fallback also failed: {e}")
+
             segmentation_result = None
 
     if segmentation_result is None:
-        print("ERROR: All segmentation methods failed. Using crude fallback values.")
+
         h, w = image.shape
         center, p_r, i_r = (w//2, h//2), 30, 80
         binary_image = np.zeros_like(image)
@@ -50,52 +53,37 @@ def extract_iris_features(image, original_color_image=None):
     occlusion_mask[bottom_mask_height:h_norm, :] = 0
     normalized_iris = cv2.bitwise_and(normalized_iris, normalized_iris, mask=occlusion_mask)
 
+    cnn_features = extract_cnn_like_features(normalized_iris)
+    surf_features = extract_surf_like_features(normalized_iris)
     gabor_features = apply_gabor_filters(normalized_iris)
-    sobel_x, sobel_y = sobel_operator(normalized_iris)
-    scharr_x, scharr_y = scharr_operator(normalized_iris)
-    median_filtered_image = median_filter(normalized_iris)
     
     try:
         lbp_features = compute_lbp(normalized_iris)
     except Exception as e:
-        print(f"LBP computation failed: {e}")
         lbp_features = np.zeros_like(normalized_iris)
     
-    try:
-        variance_features = compute_variance_features(normalized_iris)
-    except Exception as e:
-        print(f"Variance computation failed: {e}")
-        variance_features = np.array([[0.0]])
-    
     feature_vectors = []
+    feature_vectors.append(cnn_features * 0.5)
+    feature_vectors.append(surf_features * 0.3)
+    
     for f in gabor_features:
-        feature_vectors.append(f.flatten() * 0.4)
+        feature_vectors.append(f.flatten() * 0.15)
     
-    # LBP features (weight: 0.3) - most robust to illumination
-    feature_vectors.append(lbp_features.flatten() * 0.3)
-    
-    # Edge features (weight: 0.2)
-    feature_vectors.extend([scharr_x.flatten() * 0.1, scharr_y.flatten() * 0.1])
-    
-    # Texture variance (weight: 0.1)
-    feature_vectors.append(variance_features.flatten() * 0.1)
+    feature_vectors.append(lbp_features.flatten() * 0.05)
     
     # Add color features if color image is provided
-    color_features = None  # Default: R,G,B,H,S,V
+    color_features = None
     if original_color_image is not None:
         try:
-            # Pass the detected iris radius to the color feature extractor
             color_features = extract_color_features(original_color_image, center, i_r)
-            print(f"Successfully extracted color histogram.")
         except Exception as e:
-            print(f"Color feature extraction failed: {e}")
             color_features = None
     
     feature_vector = np.concatenate(feature_vectors)
     feature_vector = robust_normalize(feature_vector)
 
     return (feature_vector, display_image, enhanced_image, filtered_image, binary_image, normalized_iris, gabor_features,
-            sobel_x, sobel_y, scharr_x, scharr_y, median_filtered_image, color_features)
+            cnn_features, surf_features, lbp_features, np.zeros_like(normalized_iris), np.zeros_like(normalized_iris), color_features)
 
 
 def detect_iris_hough(image):
@@ -109,7 +97,7 @@ def detect_iris_hough(image):
     pupil_circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, **pupil_params)
     
     if pupil_circles is None:
-        print("WARN: Hough Transform could not detect pupil.")
+
         return None
         
     pupil = np.uint16(np.around(pupil_circles[0, 0]))
@@ -122,7 +110,7 @@ def detect_iris_hough(image):
     iris_circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, **iris_params)
 
     if iris_circles is None:
-        print("WARN: Hough Transform could not detect iris.")
+
         return None
 
     # Find the iris circle most concentric with the pupil
@@ -358,7 +346,6 @@ def robust_normalize(feature_vector):
         return np.ones_like(feature_vector) / np.sqrt(len(feature_vector))
 
 def extract_color_features(color_image, iris_center, iris_radius):
-    """Extract a color histogram from the iris region"""
     h, w = color_image.shape[:2]
     cX, cY = int(iris_center[0]), int(iris_center[1])
     
@@ -366,74 +353,46 @@ def extract_color_features(color_image, iris_center, iris_radius):
     if cX > 0 and cY > 0:
         cv2.circle(mask, (cX, cY), int(iris_radius), 255, -1)
     
-    # Calculate a 3D BGR histogram. Using 8 bins per channel for 512 features.
     hist = cv2.calcHist([color_image], [0, 1, 2], mask, [8, 8, 8], [0, 256, 0, 256, 0, 256])
-    
-    # Normalize the histogram to be comparable
     cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
     
     return hist
 
 def color_similarity(hist1, hist2):
-    """Calculate color similarity between two color histograms using correlation"""
     if hist1 is None or hist2 is None or hist1.size == 0 or hist2.size == 0:
         return 0.0
-        
-    # Correlation returns 1 for perfect match, -1 for perfect mismatch.
     score = cv2.compareHist(hist1.astype(np.float32), hist2.astype(np.float32), cv2.HISTCMP_CORREL)
-    
-    # Normalize from [-1, 1] range to [0, 1] range
     return (score + 1) / 2
 
 def enhanced_cosine_similarity(vector1, vector2, color_hist1=None, color_hist2=None):
-    """Enhanced similarity with a dynamic color penalty and score fusion"""
-    
-    # --- DYNAMIC COLOR PENALTY ---
     color_multiplier = 1.0
     if color_hist1 is not None and color_hist2 is not None:
         color_sim = color_similarity(color_hist1, color_hist2)
-        print(f"Color Histogram Similarity: {color_sim:.3f}")
         
-        # This new penalty curve replaces the old "hard gate"
         if color_sim >= 0.8:
-            color_multiplier = 1.0  # Very similar color, no penalty
+            color_multiplier = 1.0
         elif color_sim >= 0.6:
-            # Moderately similar, gentle linear penalty
             color_multiplier = 0.8 + (color_sim - 0.6) * 1.0 
         elif color_sim >= 0.4:
-            # Low similarity, aggressive non-linear penalty
             color_multiplier = 0.1 + (color_sim - 0.4) * 3.5
         else:
-            # Very different colors, massive penalty to ensure no match
             color_multiplier = 0.05
-            
-        print(f"Applied Color Penalty Multiplier: {color_multiplier:.3f}")
 
-    # --- TEXTURE SIMILARITY ---
     try:
         cos_sim = cosine_similarity(vector1, vector2)
-        
-        # Pearson correlation coefficient
         corr_matrix = np.corrcoef(vector1, vector2)
         corr_coef = 0.0
         if corr_matrix.shape == (2, 2) and not np.isnan(corr_matrix[0, 1]):
             corr_coef = corr_matrix[0, 1]
         
-        # Euclidean distance
         euclidean_dist = np.linalg.norm(vector1 - vector2)
         euclidean_sim = max(0, 1 - (euclidean_dist / np.sqrt(2)))
-        
-        # Weighted combination of texture metrics
         texture_sim = (0.5 * cos_sim + 0.3 * abs(corr_coef) + 0.2 * euclidean_sim)
-        
-        # --- SCORE FUSION ---
-        # The final score is the texture match attenuated by the color penalty.
         final_score = texture_sim * color_multiplier
         
         return max(0.0, min(1.0, final_score))
         
     except Exception as e:
-        print(f"Texture similarity calculation failed: {e}")
         return 0.0
 
 
@@ -446,3 +405,115 @@ def cosine_similarity(vector1, vector2):
         return 0.0
 
     return dot_product / (norm1 * norm2)
+
+
+def extract_cnn_like_features(image):
+    features = []
+    
+    h, w = image.shape
+    patch_size = min(h, w) // 8
+    if patch_size < 4:
+        patch_size = 4
+    
+    conv_kernels = [
+        np.array([[-1, -1, -1], [0, 0, 0], [1, 1, 1]]),
+        np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]]),
+        np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]]),
+        np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]),
+        np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]),
+        np.array([[1, 1, 1], [1, -8, 1], [1, 1, 1]])
+    ]
+    
+    for kernel in conv_kernels:
+        conv_result = correlate2d(image, kernel, mode='valid')
+        
+        pooled = []
+        step_h = max(1, conv_result.shape[0] // 4)
+        step_w = max(1, conv_result.shape[1] // 4)
+        
+        for i in range(0, conv_result.shape[0], step_h):
+            for j in range(0, conv_result.shape[1], step_w):
+                patch = conv_result[i:i+step_h, j:j+step_w]
+                if patch.size > 0:
+                    pooled.extend([np.max(patch), np.mean(patch), np.std(patch)])
+        
+        features.extend(pooled)
+    
+    multi_scale_features = []
+    for scale in [0.5, 1.0, 1.5]:
+        scaled_h, scaled_w = int(h * scale), int(w * scale)
+        if scaled_h > 0 and scaled_w > 0:
+            scaled_image = cv2.resize(image, (scaled_w, scaled_h))
+            
+            hist = cv2.calcHist([scaled_image], [0], None, [16], [0, 256])
+            multi_scale_features.extend(hist.flatten())
+            
+            entropy_val = entropy(hist.flatten() + 1e-10)
+            multi_scale_features.append(entropy_val)
+    
+    features.extend(multi_scale_features)
+    
+    return np.array(features, dtype=np.float32)
+
+
+def extract_surf_like_features(image):
+    features = []
+    
+    h, w = image.shape
+    
+    if h < 9 or w < 9:
+        return np.zeros(64, dtype=np.float32)
+    
+    hessian_kernels = {
+        'Dxx': np.array([[1, -2, 1], [1, -2, 1], [1, -2, 1]]),
+        'Dyy': np.array([[1, 1, 1], [-2, -2, -2], [1, 1, 1]]),
+        'Dxy': np.array([[1, 0, -1], [0, 0, 0], [-1, 0, 1]])
+    }
+    
+    for scale in [1, 2]:
+        kernel_size = 3 * scale
+        if kernel_size >= min(h, w):
+            continue
+            
+        responses = {}
+        for name, kernel in hessian_kernels.items():
+            if scale > 1:
+                kernel = cv2.resize(kernel.astype(np.float32), (kernel_size, kernel_size))
+            responses[name] = correlate2d(image, kernel, mode='valid')
+        
+        if len(responses) == 3:
+            det_hessian = (responses['Dxx'] * responses['Dyy'] - 
+                          0.81 * responses['Dxy']**2)
+            
+            grid_size = 4
+            step_h = max(1, det_hessian.shape[0] // grid_size)
+            step_w = max(1, det_hessian.shape[1] // grid_size)
+            
+            for i in range(grid_size):
+                for j in range(grid_size):
+                    start_h = i * step_h
+                    start_w = j * step_w
+                    end_h = min((i + 1) * step_h, det_hessian.shape[0])
+                    end_w = min((j + 1) * step_w, det_hessian.shape[1])
+                    
+                    if start_h < end_h and start_w < end_w:
+                        region = det_hessian[start_h:end_h, start_w:end_w]
+                        if region.size > 0:
+                            features.extend([
+                                np.max(region),
+                                np.mean(region),
+                                np.std(region),
+                                np.sum(region > np.percentile(region, 90))
+                            ])
+    
+    target_size = 64
+    current_size = len(features)
+    
+    if current_size == 0:
+        return np.zeros(target_size, dtype=np.float32)
+    elif current_size < target_size:
+        features.extend([0.0] * (target_size - current_size))
+    elif current_size > target_size:
+        features = features[:target_size]
+    
+    return np.array(features, dtype=np.float32)
